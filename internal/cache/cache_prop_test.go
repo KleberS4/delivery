@@ -107,8 +107,12 @@ func TestPropCacheRoundTrip(t *testing.T) {
 func TestPropCacheKeyStable(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		r := genRef(t)
-		if cache.Key(r) != cache.Key(r) {
-			t.Fatal("cache key is unstable between calls")
+
+		// Two separate calls, held apart so the comparison is between two real
+		// derivations rather than one expression compared with itself.
+		first, second := cache.Key(r), cache.Key(r)
+		if first != second {
+			t.Fatalf("cache key is unstable between calls: %s then %s", first, second)
 		}
 
 		other := genRef(t)

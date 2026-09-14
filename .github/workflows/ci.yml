@@ -35,10 +35,12 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@2025.1
           staticcheck ./...
 
-      # The seed is logged on every run so a property failure can be
-      # replayed from the log. Shrinking is never disabled.
+      # rapid defaults to a random seed and prints the failing one, so a
+      # property failure is replayable from the log. Shrinking is never
+      # disabled. The flag is not passed explicitly: it is undefined in the
+      # test binaries of packages that do not import rapid, and would fail them.
       - name: test
-        run: go test -v -race -rapid.seed=0 ./...
+        run: go test -v -race ./...
 
       - name: coverage
         run: |

@@ -20,9 +20,12 @@ check: fmt-check vet staticcheck test test-race
 test:
 	go test $(PKG)
 
-# The seed is logged on every run, and shrinking is never disabled.
+# rapid already defaults to a random seed and prints the failing one, so a
+# property failure is replayable from the log. Shrinking is never disabled.
+# The flag is not passed explicitly: it is undefined in the test binaries of
+# packages that do not import rapid, and would fail them.
 test-race:
-	go test -race -rapid.seed=0 $(PKG)
+	go test -race $(PKG)
 
 cover:
 	go test -coverprofile=coverage.out $(PKG)

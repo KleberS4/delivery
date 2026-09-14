@@ -58,7 +58,6 @@ const (
 type env struct {
 	stdout  io.Writer
 	stderr  io.Writer
-	log     *slog.Logger
 	style   styler
 	verbose bool
 	noColor bool
