@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      # Tool versions are pinned, never floating.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+          check-latest: false
+
+      - name: format
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "unformatted files:"; echo "$out"; exit 1
+          fi
+
+      - name: vet
+        run: go vet ./...
+
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@2025.1
+          staticcheck ./...
+
+      # The seed is logged on every run so a property failure can be
+      # replayed from the log. Shrinking is never disabled.
+      - name: test
+        run: go test -v -race -rapid.seed=0 ./...
+
+      - name: coverage
+        run: |
+          go test -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | \
+            grep -E 'internal/(ref|trust|integrity|anchor)/' || true
+          go tool cover -func=coverage.out | tail -1
+
+      - name: cross-compile
+        run: |
+          for p in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS=${p%/*} GOARCH=${p#*/} CGO_ENABLED=0 \
+              go build -trimpath -o /dev/null ./cmd/delivery
+          done
+
+  # These become a gate at the first public release. Until then they run in
+  # reporting mode, so the signal exists before it starts blocking.
+  supply-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+
+      - name: verify dependencies
+        run: go mod verify
+
+      - name: vulnerability scan
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
