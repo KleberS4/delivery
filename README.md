@@ -28,7 +28,9 @@ $ make check      # fmt, vet, staticcheck, tests, race detector
 $ make release    # static binaries for 4 platforms, with SHA256SUMS
 ```
 
-Go 1.24 or newer. The binary is static and has no runtime dependencies.
+Go 1.25.13 or newer — earlier patch releases carry known standard-library
+vulnerabilities in the TLS, x509, url and tar paths this tool actually uses.
+The binary is static and has no runtime dependencies.
 
 ## Use
 
