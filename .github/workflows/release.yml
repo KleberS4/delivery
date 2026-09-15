@@ -1,0 +1,72 @@
+name: release
+
+# Cutting a tag is what publishes. Nothing here runs on an ordinary push, and
+# nothing reaches a release without passing the same gate every commit passes.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The version stamped into the binary comes from git describe, and
+          # the SBOM takes the main module's version the same way. A shallow
+          # clone sees no tags and both silently fall back to a dev version.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.13'
+          check-latest: false
+
+      # A tag push does not trigger ci.yml, so the gate is repeated here
+      # rather than assumed.
+      - name: check
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then
+            echo "unformatted files:"; echo "$out"; exit 1
+          fi
+          go vet ./...
+          go install honnef.co/go/tools/cmd/staticcheck@2025.1
+          staticcheck ./...
+          go test -race ./...
+
+      - name: build
+        run: make release
+
+      # v1.10.0 is the newest release that still builds under Go 1.25.13;
+      # v1.11.0 and later require Go 1.26.
+      - name: sbom
+        run: |
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.10.0
+          cyclonedx-gomod mod -json -licenses -output dist/sbom.cdx.json
+          cd dist && sha256sum sbom.cdx.json >> SHA256SUMS
+
+      - name: verify the artefacts before anything is published
+        run: |
+          cd dist
+          sha256sum -c SHA256SUMS
+          for f in *; do
+            [ "$f" = SHA256SUMS ] && continue
+            grep -q "  $f\$" SHA256SUMS || { echo "missing from SHA256SUMS: $f"; exit 1; }
+          done
+          # The version is stamped from git describe, so a tree that was not
+          # clean at build time yields a -dirty suffix. That must never reach a
+          # release, and the tag is the only thing it is allowed to say.
+          got=$(./delivery-linux-amd64 --version | awk '{print $NF}')
+          if [ "$got" != "$GITHUB_REF_NAME" ]; then
+            echo "version mismatch: binary says '$got', tag is '$GITHUB_REF_NAME'"; exit 1
+          fi
+
+      # gh ships on the runner, so publishing pulls in no third-party action.
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
