@@ -1,8 +1,8 @@
 // Package tool adapts delivery to wherever each AI tool keeps its skills.
 //
-// It is one of the three extension points. Codex and Gemini arrive as
-// new Adapter implementations; the --tool flag already accepts the parameter
-// in v1, so the command-line interface does not change when they land.
+// It is one of the three extension points. The --tool flag already
+// accepted the parameter in v1, so adding a tool changes nothing about the
+// command-line interface.
 //
 // Adapters do not convert formats: the markdown is written exactly as it came.
 package tool
@@ -10,13 +10,17 @@ package tool
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/kleberS4/delivery/internal/atomicfs"
 	"github.com/kleberS4/delivery/internal/errs"
 )
 
-// EnvClaudeHome overrides the Claude Code root. Used in tests.
-const EnvClaudeHome = "DELIVERY_CLAUDE_HOME"
+// Roots overridden in tests, and by anyone whose tool lives somewhere unusual.
+const (
+	EnvClaudeHome = "DELIVERY_CLAUDE_HOME"
+	EnvCodexHome  = "DELIVERY_CODEX_HOME"
+)
 
 // AnchorSkillName is the directory name of the anchor skill.
 const AnchorSkillName = "delivery"
@@ -34,69 +38,82 @@ type Adapter interface {
 	ReadSkill(name string) ([]byte, error)
 }
 
-// Supported lists the names accepted by the --tool flag in v1.
-func Supported() []string { return []string{"claude"} }
+// Supported lists the names accepted by the --tool flag.
+func Supported() []string { return []string{"claude", "codex"} }
 
 // ByName resolves an adapter by name.
+//
+// Codex reads personal skills from ~/.agents/skills, which is deliberately not
+// under CODEX_HOME: that variable points at ~/.codex, where Codex keeps config,
+// credentials and history — not skills. Pointing this at ~/.codex/skills would
+// write somewhere Codex does not read.
 func ByName(name string) (Adapter, error) {
 	switch name {
 	case "claude", "claude-code", "":
-		return newClaudeCode()
+		return newDirAdapter("claude", EnvClaudeHome, ".claude")
+	case "codex":
+		return newDirAdapter("codex", EnvCodexHome, ".agents")
 	default:
 		return nil, errs.Usage(
-			"use --tool claude; other tools arrive in future versions",
-			"tool %q is not supported in this version", name)
+			"use one of: "+strings.Join(Supported(), ", "),
+			"tool %q is not supported", name)
 	}
 }
 
-type claudeCode struct {
+// dirAdapter serves any tool that keeps skills as one directory per skill with
+// a SKILL.md inside it. Both tools supported so far do exactly that, and differ
+// only in where that directory lives — so the behaviour is written once. A tool
+// that stores skills some other way needs its own implementation of Adapter,
+// not another root passed to this one.
+type dirAdapter struct {
+	name      string
 	skillsDir string
 }
 
-func newClaudeCode() (Adapter, error) {
-	root := os.Getenv(EnvClaudeHome)
+func newDirAdapter(name, env, defaultDir string) (Adapter, error) {
+	root := os.Getenv(env)
 	if root == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return nil, errs.Wrap(err, errs.ClassState,
-				"set "+EnvClaudeHome+" to the Claude Code root",
+				"set "+env+" to the "+name+" root",
 				"could not determine the user's home directory")
 		}
-		root = filepath.Join(home, ".claude")
+		root = filepath.Join(home, defaultDir)
 	}
-	return &claudeCode{skillsDir: filepath.Join(root, "skills")}, nil
+	return &dirAdapter{name: name, skillsDir: filepath.Join(root, "skills")}, nil
 }
 
-func (c *claudeCode) Name() string      { return "claude" }
-func (c *claudeCode) SkillsDir() string { return c.skillsDir }
+func (d *dirAdapter) Name() string      { return d.name }
+func (d *dirAdapter) SkillsDir() string { return d.skillsDir }
 
-func (c *claudeCode) AnchorPath() string {
-	return filepath.Join(c.skillsDir, AnchorSkillName, skillFileName)
+func (d *dirAdapter) AnchorPath() string {
+	return filepath.Join(d.skillsDir, AnchorSkillName, skillFileName)
 }
 
-func (c *claudeCode) SkillPath(name string) string {
-	return filepath.Join(c.skillsDir, name, skillFileName)
+func (d *dirAdapter) SkillPath(name string) string {
+	return filepath.Join(d.skillsDir, name, skillFileName)
 }
 
-func (c *claudeCode) WriteSkill(name string, content []byte) error {
-	if err := atomicfs.WriteFile(c.SkillPath(name), content, 0o600); err != nil {
+func (d *dirAdapter) WriteSkill(name string, content []byte) error {
+	if err := atomicfs.WriteFile(d.SkillPath(name), content, 0o600); err != nil {
 		return errs.Wrap(err, errs.ClassState,
-			"check permissions on "+c.skillsDir, "writing skill %q", name)
+			"check permissions on "+d.skillsDir, "writing skill %q", name)
 	}
 	return nil
 }
 
-func (c *claudeCode) RemoveSkill(name string) error {
-	dir := filepath.Dir(c.SkillPath(name))
+func (d *dirAdapter) RemoveSkill(name string) error {
+	dir := filepath.Dir(d.SkillPath(name))
 	if err := os.RemoveAll(dir); err != nil {
 		return errs.Wrap(err, errs.ClassState,
-			"check permissions on "+c.skillsDir, "removing skill %q", name)
+			"check permissions on "+d.skillsDir, "removing skill %q", name)
 	}
 	return nil
 }
 
-func (c *claudeCode) ReadSkill(name string) ([]byte, error) {
-	b, err := os.ReadFile(c.SkillPath(name))
+func (d *dirAdapter) ReadSkill(name string) ([]byte, error) {
+	b, err := os.ReadFile(d.SkillPath(name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, errs.NotFound("check the installed skill's name",

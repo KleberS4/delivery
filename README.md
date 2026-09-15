@@ -81,6 +81,11 @@ does not warn and deliver, and it does not repair itself. Review and re-approve.
 therefore have not reviewed. Trusting one skill at a time is safer and is the
 default.
 
+`--tool` picks where skills are installed: `claude` (default) writes to
+`~/.claude/skills`, `codex` to `~/.agents/skills`, which is where Codex reads
+personal skills — not `~/.codex`, which holds its config and credentials. Trust
+is shared: approving a skill once makes it available to every tool.
+
 ## References
 
 ```
@@ -135,16 +140,18 @@ delimited block with each one's local path:
 |---|---|
 | `$XDG_CONFIG_HOME/delivery/trust.json` | Your trust decisions, `0600` required |
 | `$XDG_CONFIG_HOME/delivery/cache/content/` | Approved content for each skill |
-| `~/.claude/skills/delivery/SKILL.md` | The anchor skill |
+| `~/.claude/skills/delivery/SKILL.md` | The anchor skill, for Claude Code |
+| `~/.agents/skills/delivery/SKILL.md` | The anchor skill, for Codex |
 
-`DELIVERY_HOME` overrides the state root, `DELIVERY_CLAUDE_HOME` the Claude Code
-root, and `DELIVERY_REGISTRY_BASE` the registry.
+`DELIVERY_HOME` overrides the state root, `DELIVERY_CLAUDE_HOME` and
+`DELIVERY_CODEX_HOME` the respective tool roots, and `DELIVERY_REGISTRY_BASE`
+the registry.
 
 ## Not there yet
 
-Public release, Windows, private skills and authentication, agents and MCP
-servers and hooks, and tools other than Claude Code (the adapter layer exists
-and `--tool` already takes the parameter).
+Windows, private skills and authentication, agents and MCP servers and hooks,
+and tools beyond Claude Code and Codex (the adapter layer takes a new one in
+about thirty lines).
 
 ## Licence
 
