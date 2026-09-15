@@ -17,8 +17,19 @@ the full prompt only at the moment it is needed.
          ▒██░
 ```
 
-> **Not released yet.** The `curl | sh` installer with checksum verification is
-> still missing, so build from source for now.
+> **No release cut yet.** The installer below is in place, but it needs a
+> published release to fetch from. Until the first tag, build from source.
+
+## Install
+
+```console
+$ curl -fsSL https://raw.githubusercontent.com/KleberS4/delivery/main/install.sh | sh
+```
+
+Linux and macOS, amd64 and arm64. The binary is checked against the release's
+`SHA256SUMS` before it is installed; a mismatch aborts and installs nothing.
+`DELIVERY_VERSION` pins a tag, `DELIVERY_INSTALL_DIR` changes the destination
+(default `~/.local/bin`).
 
 ## Build
 
@@ -131,9 +142,9 @@ root, and `DELIVERY_REGISTRY_BASE` the registry.
 
 ## Not there yet
 
-Install script, public release, Windows, private skills and authentication,
-agents and MCP servers and hooks, and tools other than Claude Code (the adapter
-layer exists and `--tool` already takes the parameter).
+Public release, Windows, private skills and authentication, agents and MCP
+servers and hooks, and tools other than Claude Code (the adapter layer exists
+and `--tool` already takes the parameter).
 
 ## Licence
 
