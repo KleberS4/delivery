@@ -27,8 +27,10 @@ test:
 test-race:
 	go test -race $(PKG)
 
+# -coverpkg counts execution across package boundaries, so packages without
+# their own tests are credited for what the CLI tests actually run.
 cover:
-	go test -coverprofile=coverage.out $(PKG)
+	go test -coverpkg=$(PKG) -coverprofile=coverage.out $(PKG)
 	go tool cover -func=coverage.out | tail -20
 
 fmt:

@@ -42,9 +42,12 @@ jobs:
       - name: test
         run: go test -v -race ./...
 
+      # -coverpkg is what makes this number honest: without it, a package with
+      # no _test.go of its own reports 0% however heavily the CLI tests drive
+      # it, and service, config, errs and tool are all exercised that way.
       - name: coverage
         run: |
-          go test -coverprofile=coverage.out ./...
+          go test -coverpkg=./... -coverprofile=coverage.out ./...
           go tool cover -func=coverage.out | \
             grep -E 'internal/(ref|trust|integrity|anchor)/' || true
           go tool cover -func=coverage.out | tail -1
