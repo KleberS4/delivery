@@ -62,10 +62,19 @@ if [ -z "$version" ]; then
 	resolved=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
 		"https://github.com/$REPO/releases/latest") \
 		|| die "could not reach GitHub to resolve the latest release"
-	version="${resolved##*/}"
-	case "$version" in
-		v*) ;;
-		*)  die "could not resolve the latest release (got '$version')" ;;
+	# A repository with no releases redirects /releases/latest to /releases,
+	# so the shape of the resolved URL — not the shape of its last segment —
+	# is what says whether a release exists at all.
+	case "$resolved" in
+		*/releases/tag/*)
+			version="${resolved##*/}"
+			;;
+		*/releases | */releases/)
+			die "$REPO has no published release yet; set DELIVERY_VERSION to install a specific tag, or build from source"
+			;;
+		*)
+			die "could not resolve the latest release of $REPO (GitHub sent us to $resolved)"
+			;;
 	esac
 fi
 

@@ -60,7 +60,10 @@ jobs:
           # The version is stamped from git describe, so a tree that was not
           # clean at build time yields a -dirty suffix. That must never reach a
           # release, and the tag is the only thing it is allowed to say.
-          got=$(./delivery-linux-amd64 --version | awk '{print $NF}')
+          # --version goes to stderr, like every other diagnostic this binary
+          # emits: stdout is reserved for payload. Reading stdout here captures
+          # an empty string and the comparison fails against nothing.
+          got=$(./delivery-linux-amd64 --version 2>&1 | awk '{print $NF}')
           if [ "$got" != "$GITHUB_REF_NAME" ]; then
             echo "version mismatch: binary says '$got', tag is '$GITHUB_REF_NAME'"; exit 1
           fi
