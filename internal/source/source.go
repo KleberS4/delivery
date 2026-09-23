@@ -49,6 +49,13 @@ const (
 )
 
 // Limits gathers the size ceilings the fetch paths require.
+//
+// The two resource ceilings were first set by guess and were wrong: 50 files
+// and 5 MB rejected four of Anthropic's own published skills. Measured against
+// the real registry, the largest is canvas-design at 82 files and 5.5 MB,
+// because it ships fonts; docx, pptx and xlsx sit between 52 and 60 files.
+// The values below clear that with room to spare and stay bounded — the
+// archive ceilings remain the outer limit on anything fetched.
 type Limits struct {
 	MaxDocument            int64
 	MaxResourcesTotal      int64
@@ -62,8 +69,8 @@ type Limits struct {
 func DefaultLimits() Limits {
 	return Limits{
 		MaxDocument:            1 << 20,   // 1 MB
-		MaxResourcesTotal:      5 << 20,   // 5 MB
-		MaxResourceCount:       50,        //
+		MaxResourcesTotal:      25 << 20,  // 25 MB
+		MaxResourceCount:       250,       //
 		MaxArchiveCompressed:   50 << 20,  // 50 MB
 		MaxArchiveUncompressed: 250 << 20, // 250 MB
 		Timeout:                30 * time.Second,
@@ -328,11 +335,11 @@ func extractSkill(tr *tar.Reader, skillPath string, lim Limits) (*artifact.Artif
 			resTotal += int64(len(content))
 			if resTotal > lim.MaxResourcesTotal {
 				return nil, errs.Usage(actionTooManyRes,
-					"recursos auxiliares excedem %d bytes", lim.MaxResourcesTotal)
+					"supporting files exceed %d bytes", lim.MaxResourcesTotal)
 			}
 			if len(resources) >= lim.MaxResourceCount {
 				return nil, errs.Usage(actionTooManyRes,
-					"skill tem mais de %d recursos auxiliares", lim.MaxResourceCount)
+					"skill has more than %d supporting files", lim.MaxResourceCount)
 			}
 			resources = append(resources, artifact.Resource{RelPath: rel, Content: content})
 		}

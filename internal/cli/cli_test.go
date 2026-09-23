@@ -94,7 +94,7 @@ func TestGetEmitsOnlyTheDocumentOnStdout(t *testing.T) {
 func TestGetAppendsResourceBlockLast(t *testing.T) {
 	paths := setupHome(t)
 	doc := "# With resources\n"
-	seedTrusted(t, paths, "gh:acme/skills/recursos", "resources", &artifact.Artifact{
+	seedTrusted(t, paths, "gh:acme/skills/withresources", "resources", &artifact.Artifact{
 		Kind:     artifact.KindSkill,
 		Document: []byte(doc),
 		Resources: []artifact.Resource{

@@ -49,7 +49,13 @@ type RegistryResolver struct {
 }
 
 // NewRegistryResolver builds the registry resolver.
+// A nil gh is filled in rather than carried: the registry resolver reaches
+// GitHub for every fetch, so a nil there is a panic waiting for whoever wires
+// this next, not a configuration worth honouring.
 func NewRegistryResolver(client *http.Client, limits Limits, gh *GitHubResolver) *RegistryResolver {
+	if gh == nil {
+		gh = NewGitHubResolver(client, limits)
+	}
 	return &RegistryResolver{
 		Client:  client,
 		Limits:  limits,
