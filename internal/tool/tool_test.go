@@ -195,3 +195,92 @@ func TestWrittenSkillIsPrivate(t *testing.T) {
 		t.Errorf("skill written with mode %04o; group and others must have no access", perm)
 	}
 }
+
+// A skill's supporting files go beside its SKILL.md, reproducing the published
+// layout. Without that, a relative reference in the body — references/api.md —
+// points at nothing once the skill is installed.
+func TestResourcesLandBesideTheSkill(t *testing.T) {
+	for _, name := range tool.Supported() {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv(tool.EnvClaudeHome, root)
+			t.Setenv(tool.EnvCodexHome, root)
+
+			a, err := tool.ByName(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.WriteSkill("demo", []byte("body")); err != nil {
+				t.Fatal(err)
+			}
+			if err := a.WriteResource("demo", "references/api.md", []byte("ref")); err != nil {
+				t.Fatalf("WriteResource: %v", err)
+			}
+
+			dir := filepath.Dir(a.SkillPath("demo"))
+			got, err := os.ReadFile(filepath.Join(dir, "references", "api.md"))
+			if err != nil {
+				t.Fatalf("resource not written beside the skill: %v", err)
+			}
+			if string(got) != "ref" {
+				t.Errorf("content = %q, want %q", got, "ref")
+			}
+		})
+	}
+}
+
+// The fetch layer rejects path escapes already. This is the last point before
+// bytes land in the user's tool directory, so it does not take that on trust.
+func TestResourcePathEscapesAreRefused(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(tool.EnvClaudeHome, root)
+
+	a, err := tool.ByName("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{
+		"../escaped.md",
+		"../../etc/cron.d/evil",
+		"references/../../escaped.md",
+		"/etc/passwd",
+		"",
+		"a\x00b",
+		`..\windows`,
+	} {
+		err := a.WriteResource("demo", bad, []byte("payload"))
+		if err == nil {
+			t.Errorf("WriteResource accepted an escaping path: %q", bad)
+			continue
+		}
+		var e *errs.Error
+		if !errors.As(err, &e) || e.Class != errs.ClassIntegrityMismatch {
+			t.Errorf("%q: class = %v, want %v", bad, e.Class, errs.ClassIntegrityMismatch)
+		}
+	}
+
+	// Nothing may have been created outside the skill's directory.
+	if _, err := os.Stat(filepath.Join(root, "escaped.md")); !os.IsNotExist(err) {
+		t.Error("a refused resource was written anyway")
+	}
+	if _, err := os.Stat(filepath.Join(root, "skills", "escaped.md")); !os.IsNotExist(err) {
+		t.Error("a refused resource escaped into the skills directory")
+	}
+}
+
+// Nested paths keep their shape: a skill shipping scripts/lib/util.py must not
+// end up with the file flattened into the skill's root.
+func TestNestedResourcePathsArePreserved(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(tool.EnvClaudeHome, root)
+
+	a, _ := tool.ByName("claude")
+	if err := a.WriteResource("demo", "scripts/lib/util.py", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(a.SkillPath("demo"))
+	if _, err := os.Stat(filepath.Join(dir, "scripts", "lib", "util.py")); err != nil {
+		t.Errorf("nested path not preserved: %v", err)
+	}
+}

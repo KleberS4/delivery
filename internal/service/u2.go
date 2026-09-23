@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -219,6 +220,31 @@ func (s *SkillService) Install(ctx context.Context, input string) (*InstallResul
 		Hash:        res.Record.SetHash,
 		InstalledAt: time.Now().UTC(),
 	})
+
+	// A previous install may hold resources this version no longer ships.
+	// Leaving them behind would make the installed tree differ from the set
+	// that was approved, which is the one thing the hash exists to prevent.
+	// Only a directory delivery manages is cleared; a skill written by hand is
+	// never touched, by the same rule uninstall follows.
+	if prev, err := s.d.Adapter.ReadSkill(res.Record.ShortName); err == nil && footer.IsManaged(prev) {
+		if err := s.d.Adapter.RemoveSkill(res.Record.ShortName); err != nil {
+			return nil, err
+		}
+	}
+
+	// Resources go down before the SKILL.md that references them, so the tool
+	// never discovers a skill whose supporting files have not arrived yet.
+	for _, rr := range res.Resources {
+		content, err := os.ReadFile(rr.Path)
+		if err != nil {
+			return nil, errs.Wrap(err, errs.ClassState,
+				"run: delivery update "+res.Record.Ref,
+				"reading cached resource %q", rr.RelPath)
+		}
+		if err := s.d.Adapter.WriteResource(res.Record.ShortName, rr.RelPath, content); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := s.d.Adapter.WriteSkill(res.Record.ShortName, doc); err != nil {
 		return nil, err

@@ -9,6 +9,7 @@ package tool
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -34,6 +35,7 @@ type Adapter interface {
 	AnchorPath() string
 	SkillPath(name string) string
 	WriteSkill(name string, content []byte) error
+	WriteResource(skill, relPath string, content []byte) error
 	RemoveSkill(name string) error
 	ReadSkill(name string) ([]byte, error)
 }
@@ -101,6 +103,52 @@ func (d *dirAdapter) WriteSkill(name string, content []byte) error {
 			"check permissions on "+d.skillsDir, "writing skill %q", name)
 	}
 	return nil
+}
+
+// WriteResource writes one of a skill's supporting files beside its SKILL.md,
+// reproducing the layout the skill was published with. That is what makes a
+// relative reference in the body — references/api.md, scripts/extract.py —
+// resolve the way it does for a skill placed there by hand.
+func (d *dirAdapter) WriteResource(skill, relPath string, content []byte) error {
+	dest, err := d.resourcePath(skill, relPath)
+	if err != nil {
+		return err
+	}
+	if err := atomicfs.WriteFile(dest, content, 0o600); err != nil {
+		return errs.Wrap(err, errs.ClassState,
+			"check permissions on "+d.skillsDir, "writing resource %q of skill %q", relPath, skill)
+	}
+	return nil
+}
+
+// resourcePath places a resource inside the skill's own directory, and refuses
+// anything that would land outside it.
+//
+// The fetch layer already rejects path escapes, so reaching here with one means
+// something upstream failed. This is the last point before bytes land in the
+// user's tool directory, which makes it the wrong place to rely on a check made
+// somewhere else.
+func (d *dirAdapter) resourcePath(skill, relPath string) (string, error) {
+	reject := func() (string, error) {
+		return "", errs.Integrity(
+			"do not install this skill; report the source",
+			"skill %q ships a resource whose path escapes its directory: %q", skill, relPath)
+	}
+	if relPath == "" || strings.ContainsRune(relPath, 0) || path.IsAbs(relPath) ||
+		filepath.IsAbs(relPath) || strings.Contains(relPath, "\\") {
+		return reject()
+	}
+
+	dir := filepath.Dir(d.SkillPath(skill))
+	dest := filepath.Join(dir, filepath.FromSlash(relPath))
+
+	// Join cleans as it goes, so a traversal shows up as a destination that no
+	// longer sits under the skill's directory.
+	rel, err := filepath.Rel(dir, dest)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return reject()
+	}
+	return dest, nil
 }
 
 func (d *dirAdapter) RemoveSkill(name string) error {

@@ -266,7 +266,8 @@ The recorded hash remains that of the original content, without the block.`,
 			diag(e, "%s installed %s", s.green("✓"), s.bold(res.ShortName))
 			diag(e, "  %s", s.dim(res.Path))
 			if res.Resources > 0 {
-				diag(e, "  %s", s.grey(fmt.Sprintf("%d supporting file(s) in the cache", res.Resources)))
+				diag(e, "  %s", s.grey(fmt.Sprintf("%s written alongside it",
+					pluralFiles(res.Resources))))
 			}
 			diag(e, "")
 			warnBudget(e, res.Stats)
@@ -510,4 +511,13 @@ func toInventoryJSON(inv *service.Inventory) inventoryJSON {
 		out.Sources = append(out.Sources, src.Source)
 	}
 	return out
+}
+
+// pluralFiles keeps the count readable. "1 supporting files" is the kind of
+// detail that makes a tool feel unfinished.
+func pluralFiles(n int) string {
+	if n == 1 {
+		return "1 supporting file"
+	}
+	return fmt.Sprintf("%d supporting files", n)
 }
