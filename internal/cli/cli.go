@@ -397,11 +397,17 @@ func emitPayload(e *env, res *service.GetResult) error {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
+	// The block names the directory and stops there, whatever the file count.
+	// Listing every path cost more context than the skill itself: for a skill
+	// of 60 files the listing ran to 12 KB against a 7 KB body, and 43% of it
+	// was the same cache prefix repeated on every line — paid on every get, to
+	// hand over an inventory the agent would open five entries of. The agent
+	// resolves a relative path against this directory, and lists it if it
+	// needs to know what is there.
 	b.WriteString(resourcesOpen)
-	b.WriteString("\nSupporting files for this skill, available on disk:\n\n")
-	for _, r := range res.Resources {
-		fmt.Fprintf(&b, "- `%s` → `%s`\n", r.RelPath, r.Path)
-	}
+	fmt.Fprintf(&b, "\nThis skill's %s are on disk under:\n\n\t%s\n\n",
+		pluralFiles(len(res.Resources)), res.ResourcesDir)
+	b.WriteString("Paths the skill refers to are relative to that directory.\n")
 	b.WriteString(resourcesClose)
 	b.WriteString("\n")
 
@@ -539,8 +545,8 @@ func reportError(e *env, err error) int {
 //
 // The common heuristic of checking only the character-device bit is not
 // enough: /dev/null has it too, and would pass as a terminal. Since this is
-// the gate that guarantees trust is always a deliberate human decision, the
-// check has to be the real one — a terminal ioctl.
+// the gate that guarantees trust is always a deliberate human decision
+// , the check has to be the real one — a terminal ioctl.
 func isTerminal(f *os.File) bool {
 	return term.IsTerminal(int(f.Fd()))
 }

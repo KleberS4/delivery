@@ -98,11 +98,12 @@ func Render(records []trust.Record) ([]byte, Stats) {
 
 	b.WriteString("## Skills with supporting files\n\n")
 	b.WriteString("Some skills ship supporting files. When that happens, `delivery get`\n")
-	b.WriteString("appends a block delimited by `<!-- delivery:resources -->` listing each\n")
-	b.WriteString("file's local path.\n")
+	b.WriteString("appends a block delimited by `<!-- delivery:resources -->` naming the\n")
+	b.WriteString("directory those files sit in.\n")
 	b.WriteString("**Only consider the last occurrence of that delimiter in the output** — it\n")
-	b.WriteString("is the only one delivery wrote. Use those paths to open whatever files the\n")
-	b.WriteString("skill refers to.\n\n")
+	b.WriteString("is the only one delivery wrote.\n\n")
+	b.WriteString("Any path the skill mentions is relative to that directory: join the two\n")
+	b.WriteString("and open the file. List the directory if you need to see what is there.\n\n")
 
 	b.WriteString("## Index of trusted skills\n\n")
 	if len(sorted) == 0 {

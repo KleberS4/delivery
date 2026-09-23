@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ func TestGetAppendsResourceBlockLast(t *testing.T) {
 		Kind:     artifact.KindSkill,
 		Document: []byte(doc),
 		Resources: []artifact.Resource{
-			{RelPath: "references/guide.md", Content: []byte("guia")},
+			{RelPath: "references/guide.md", Content: []byte("guide")},
 			{RelPath: "scripts/run.sh", Content: []byte("echo")},
 		},
 	})
@@ -113,8 +114,13 @@ func TestGetAppendsResourceBlockLast(t *testing.T) {
 	if !strings.Contains(stdout, "<!-- delivery:resources -->") {
 		t.Fatal("resource block missing")
 	}
-	if !strings.Contains(stdout, "references/guide.md") || !strings.Contains(stdout, "scripts/run.sh") {
-		t.Fatal("resource block does not list every file")
+	// The block names the directory; it does not enumerate. Listing every path
+	// cost more context than the skill itself.
+	if !strings.Contains(stdout, paths.CacheDir) {
+		t.Fatal("resource block does not name the directory the files are under")
+	}
+	if strings.Contains(stdout, "references/guide.md") || strings.Contains(stdout, "scripts/run.sh") {
+		t.Fatal("resource block enumerates individual files")
 	}
 	if !strings.HasSuffix(strings.TrimSpace(stdout), "<!-- /delivery:resources -->") {
 		t.Fatal("the resource block is not the last content in the output")
@@ -329,5 +335,49 @@ func TestStdoutStaysCleanOnEveryFailure(t *testing.T) {
 		if stdout != "" {
 			t.Errorf("%v: stdout contaminated on failure: %q", args, stdout)
 		}
+	}
+}
+
+// The whole reason the block names a directory instead of listing paths: its
+// size must not track the number of files. A skill of sixty files once paid
+// 12 KB of listing against a 7 KB body, on every get.
+func TestResourceBlockSizeDoesNotTrackFileCount(t *testing.T) {
+	block := func(t *testing.T, n int) string {
+		t.Helper()
+		paths := setupHome(t)
+		res := make([]artifact.Resource, 0, n)
+		for i := 0; i < n; i++ {
+			res = append(res, artifact.Resource{
+				RelPath: fmt.Sprintf("scripts/nested/deeply/file%03d.py", i),
+				Content: []byte("x"),
+			})
+		}
+		seedTrusted(t, paths, "gh:acme/skills/many", "many", &artifact.Artifact{
+			Kind:      artifact.KindSkill,
+			Document:  []byte("# Many\n"),
+			Resources: res,
+		})
+		stdout, _, code := run(t, "get", "many")
+		if code != cli.ExitOK {
+			t.Fatalf("exit code = %d", code)
+		}
+		i := strings.LastIndex(stdout, "<!-- delivery:resources -->")
+		if i < 0 {
+			t.Fatal("resource block missing")
+		}
+		return stdout[i:]
+	}
+
+	small := block(t, 2)
+	large := block(t, 300)
+
+	// Only the file count differs between the two, so the difference has to be
+	// a handful of characters, not kilobytes.
+	if d := len(large) - len(small); d > 8 {
+		t.Errorf("block grew %d bytes going from 2 files to 300; it must name the directory, not the files\n--- 2 files:\n%s\n--- 300 files:\n%s",
+			d, small, large)
+	}
+	if strings.Contains(large, "file299.py") {
+		t.Error("the block enumerated individual files")
 	}
 }

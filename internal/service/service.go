@@ -247,7 +247,11 @@ type GetResult struct {
 	Record    trust.Record
 	Document  []byte
 	Resources []ResourceRef
-	FromCache bool
+	// ResourcesDir is the directory the relative paths are relative to. It is
+	// carried rather than rebuilt by the caller, because the two would then
+	// have to agree on the cache's layout in two places.
+	ResourcesDir string
+	FromCache    bool
 }
 
 // SkillService hands over skill content.
@@ -314,7 +318,8 @@ func (s *SkillService) Get(ctx context.Context, input string) (*GetResult, error
 		res = append(res, ResourceRef{RelPath: rr.RelPath, Path: base + "/" + rr.RelPath})
 	}
 
-	return &GetResult{Record: rec, Document: a.Document, Resources: res, FromCache: fromCache}, nil
+	return &GetResult{Record: rec, Document: a.Document, Resources: res,
+		ResourcesDir: base, FromCache: fromCache}, nil
 }
 
 // getBySourceTrust hands over a skill covered only by source trust.
@@ -343,7 +348,7 @@ func (s *SkillService) getBySourceTrust(ctx context.Context, rec trust.Record) (
 			s.d.Log.Warn("could not write the cache", "error", err)
 		}
 	}
-	return &GetResult{Record: rec, Document: a.Document, Resources: res}, nil
+	return &GetResult{Record: rec, Document: a.Document, Resources: res, ResourcesDir: base}, nil
 }
 
 // resolveName turns the supplied text into a trust record.

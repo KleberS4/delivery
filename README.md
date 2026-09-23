@@ -126,20 +126,30 @@ Colour is disabled when the output is piped, when `NO_COLOR` is set, or with
 `--no-color`.
 
 When a skill ships supporting files, `get` downloads them too and appends a
-delimited block with each one's local path:
+delimited block naming the directory they sit in:
 
 ```
 <!-- delivery:resources -->
-- `scripts/extract.py` → `/home/you/.config/delivery/cache/.../scripts/extract.py`
+This skill's 60 supporting files are on disk under:
+
+	/home/you/.config/delivery/cache/content/anthropics-skills-docx-.../resources
+
+Paths the skill refers to are relative to that directory.
 <!-- /delivery:resources -->
 ```
 
-That block exists because `get` writes the skill's body to stdout, where a
-relative reference like `references/api.md` has no directory to resolve
-against. `install` needs no such indirection: it writes the supporting files
-beside the `SKILL.md`, reproducing the published layout, so relative references
-resolve exactly as they do for a skill placed there by hand. Reinstalling
-clears files the new version no longer ships.
+The block names the directory and stops there, whatever the file count. It once
+listed every path, which cost more context than the skill itself: for a skill of
+60 files the listing ran to 12 KB against a 7 KB body, and 43% of it was the
+same cache prefix repeated on every line — paid on every `get`, to hand over an
+inventory the agent would open five entries of.
+
+The block exists at all because `get` writes the body to stdout, where a
+relative reference like `references/api.md` has no directory to resolve against.
+`install` needs no such indirection: it writes the supporting files beside the
+`SKILL.md`, reproducing the published layout, so relative references resolve
+exactly as they do for a skill placed there by hand. Reinstalling clears files
+the new version no longer ships.
 
 ## State
 
