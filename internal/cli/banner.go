@@ -60,6 +60,21 @@ const (
 	colRight = 130
 )
 
+// The same four tones as 24-bit values. The palette entries above only
+// approximate these, so a terminal that can paint them gets them exactly.
+//
+// The ramp is ordered by relative luminance (0.2126R + 0.7152G + 0.0722B),
+// which is the measure that decides whether faces read apart rather than
+// merging: 0.89, 0.78, 0.64, 0.47 — four even steps, in the same order as the
+// density glyphs below, so the colour and the monochrome versions describe the
+// same solid.
+var (
+	rgbTape  = [3]int{251, 224, 189}
+	rgbTop   = [3]int{240, 192, 138}
+	rgbLeft  = [3]int{224, 154, 82}
+	rgbRight = [3]int{176, 112, 42}
+)
+
 // Glyphs for terminals that cannot paint the palette.
 //
 // The tones have to stay apart without colour or the box flattens into a blob,
@@ -79,13 +94,13 @@ const tagline = "Skills arrive when the task needs them, not before."
 func toneOf(cell byte) pixel {
 	switch cell {
 	case 'T':
-		return pixel{colour: colTop, glyph: glyphTop, filled: true}
+		return pixel{colour: colTop, rgb: rgbTop, glyph: glyphTop, filled: true}
 	case 'L':
-		return pixel{colour: colLeft, glyph: glyphLeft, filled: true}
+		return pixel{colour: colLeft, rgb: rgbLeft, glyph: glyphLeft, filled: true}
 	case 'R':
-		return pixel{colour: colRight, glyph: glyphRight, filled: true}
+		return pixel{colour: colRight, rgb: rgbRight, glyph: glyphRight, filled: true}
 	case '#':
-		return pixel{colour: colTape, glyph: glyphTape, filled: true}
+		return pixel{colour: colTape, rgb: rgbTape, glyph: glyphTape, filled: true}
 	default:
 		return pixel{}
 	}

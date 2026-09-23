@@ -34,6 +34,10 @@ const (
 type styler struct {
 	enabled  bool
 	extended bool
+	// truecolor tracks 24-bit support separately from the 256-colour palette.
+	// The mark's tones are chosen as RGB and only approximated by palette
+	// entries, so where 24-bit is available the approximation is skipped.
+	truecolor bool
 }
 
 func newStyler(w io.Writer, forceOff bool) styler {
@@ -51,7 +55,7 @@ func newStyler(w io.Writer, forceOff bool) styler {
 	if !ok || !isTerminal(f) {
 		return styler{}
 	}
-	return styler{enabled: true, extended: supports256(termVar)}
+	return styler{enabled: true, extended: supports256(termVar), truecolor: supportsTruecolor()}
 }
 
 // supports256 reports whether the terminal can paint the 256-colour palette.
@@ -61,11 +65,21 @@ func newStyler(w io.Writer, forceOff bool) styler {
 // density, which is why the fallback has to exist rather than being an
 // afterthought.
 func supports256(termVar string) bool {
+	if supportsTruecolor() {
+		return true
+	}
+	return strings.Contains(termVar, "256color")
+}
+
+// supportsTruecolor reports 24-bit support. COLORTERM is the only signal worth
+// trusting here: TERM says nothing about it, and probing the terminal would
+// mean writing to a stream reserved for diagnostics.
+func supportsTruecolor() bool {
 	switch os.Getenv("COLORTERM") {
 	case "truecolor", "24bit":
 		return true
 	}
-	return strings.Contains(termVar, "256color")
+	return false
 }
 
 func (s styler) wrap(code, text string) string {
@@ -87,8 +101,9 @@ func (s styler) grey(t string) string   { return s.wrap(ansiGrey, t) }
 // that can paint it, and a density glyph for those that cannot. The zero value
 // is transparent.
 type pixel struct {
-	colour int
-	glyph  rune
+	colour int    // 256-colour palette entry, an approximation of rgb
+	rgb    [3]int // the tone as chosen, used where 24-bit is available
+	glyph  rune   // density, for terminals with no colour at all
 	filled bool
 }
 
@@ -113,13 +128,13 @@ func (s styler) blockRun(top, bottom pixel, n int) string {
 
 	switch {
 	case !bottom.filled:
-		return paint(top.colour, -1, "▀", n)
+		return s.paint(top, pixel{}, "▀", n)
 	case !top.filled:
-		return paint(bottom.colour, -1, "▄", n)
+		return s.paint(bottom, pixel{}, "▄", n)
 	case top.colour == bottom.colour:
-		return paint(top.colour, -1, "█", n)
+		return s.paint(top, pixel{}, "█", n)
 	default:
-		return paint(top.colour, bottom.colour, "▀", n)
+		return s.paint(top, bottom, "▀", n)
 	}
 }
 
@@ -141,11 +156,18 @@ func (s styler) flatRun(top, bottom pixel, n int) string {
 // paint repeats a glyph under one foreground and, when bg is not negative, one
 // background colour — a single escape for the whole run rather than one per
 // cell.
-func paint(fg, bg int, glyph string, n int) string {
+func (s styler) paint(fg, bg pixel, glyph string, n int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\033[38;5;%dm", fg)
-	if bg >= 0 {
-		fmt.Fprintf(&b, "\033[48;5;%dm", bg)
+	if s.truecolor {
+		fmt.Fprintf(&b, "\033[38;2;%d;%d;%dm", fg.rgb[0], fg.rgb[1], fg.rgb[2])
+		if bg.filled {
+			fmt.Fprintf(&b, "\033[48;2;%d;%d;%dm", bg.rgb[0], bg.rgb[1], bg.rgb[2])
+		}
+	} else {
+		fmt.Fprintf(&b, "\033[38;5;%dm", fg.colour)
+		if bg.filled {
+			fmt.Fprintf(&b, "\033[48;5;%dm", bg.colour)
+		}
 	}
 	b.WriteString(strings.Repeat(glyph, n))
 	b.WriteString(ansiReset)

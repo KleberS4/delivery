@@ -137,3 +137,79 @@ func TestSupports256Detection(t *testing.T) {
 		}
 	}
 }
+
+// The tones are chosen as RGB; the palette entries only approximate them. A
+// terminal that can paint 24-bit gets them exactly, and never a palette index.
+func TestTruecolourPaintsExactTones(t *testing.T) {
+	s := styler{enabled: true, extended: true, truecolor: true}
+
+	got := s.blockRun(toneOf('T'), toneOf('L'), 2)
+
+	if !strings.Contains(got, "\033[38;2;240;192;138m") {
+		t.Errorf("top face not painted as 24-bit RGB: %q", got)
+	}
+	if !strings.Contains(got, "\033[48;2;224;154;82m") {
+		t.Errorf("left face not painted as a 24-bit background: %q", got)
+	}
+	if strings.Contains(got, "38;5;") || strings.Contains(got, "48;5;") {
+		t.Errorf("a palette index survived into the 24-bit run: %q", got)
+	}
+}
+
+// Three degradations, each one step coarser, and every one has to stay correct
+// because a terminal only ever exercises the tier it supports.
+func TestEachColourTierDegradesCorrectly(t *testing.T) {
+	cases := []struct {
+		name   string
+		s      styler
+		want   string
+		reject string
+	}{
+		{"truecolor", styler{enabled: true, extended: true, truecolor: true}, "38;2;", "38;5;"},
+		{"256 colours", styler{enabled: true, extended: true}, "38;5;", "38;2;"},
+		{"16 colours", styler{enabled: true}, ansiYellow, "38;"},
+		{"no colour", styler{}, "▓", "\033"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.s.blockRun(toneOf('T'), toneOf('T'), 2)
+			if !strings.Contains(got, c.want) {
+				t.Errorf("missing %q: %q", c.want, got)
+			}
+			if strings.Contains(got, c.reject) {
+				t.Errorf("a higher tier leaked in (%q): %q", c.reject, got)
+			}
+		})
+	}
+}
+
+// The four tones must stay ordered by relative luminance. That ordering is
+// what makes the faces read apart rather than merge, and it is the same order
+// the density glyphs follow, so colour and monochrome describe one solid.
+func TestTonesAreOrderedByLuminance(t *testing.T) {
+	lum := func(p pixel) float64 {
+		return (0.2126*float64(p.rgb[0]) + 0.7152*float64(p.rgb[1]) + 0.0722*float64(p.rgb[2])) / 255
+	}
+	// Darkest to lightest: shadowed face, lit face, top, tape.
+	order := []byte{'R', 'L', 'T', '#'}
+	glyphs := []rune{glyphRight, glyphLeft, glyphTop, glyphTape}
+
+	for i := 1; i < len(order); i++ {
+		prev, cur := toneOf(order[i-1]), toneOf(order[i])
+		if lum(cur) <= lum(prev) {
+			t.Errorf("%q (%.3f) is not lighter than %q (%.3f)",
+				order[i], lum(cur), order[i-1], lum(prev))
+		}
+		if d := lum(cur) - lum(prev); d < 0.08 {
+			t.Errorf("%q and %q are only %.3f apart; the faces will merge",
+				order[i-1], order[i], d)
+		}
+	}
+	for i, cell := range order {
+		if toneOf(cell).glyph != glyphs[i] {
+			t.Errorf("tone %q carries glyph %q; the density ramp must follow the same order as the luminance ramp",
+				cell, toneOf(cell).glyph)
+		}
+	}
+}
